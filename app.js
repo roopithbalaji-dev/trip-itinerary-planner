@@ -111,3 +111,32 @@ L.marker([m.lat,m.lng])
 }
 
 loadMarkers()
+
+async function searchPlace(){
+
+const query = document.getElementById("placeSearch").value
+
+if(!query) return
+
+const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}`
+
+const res = await fetch(url)
+
+const data = await res.json()
+
+if(data.length === 0) return
+
+const place = data[0]
+
+const lat = parseFloat(place.lat)
+const lon = parseFloat(place.lon)
+
+map.setView([lat,lon],14)
+
+const marker = L.marker([lat,lon]).addTo(map)
+
+marker.bindPopup(place.display_name).openPopup()
+
+saveMarker(lat,lon)
+
+}
