@@ -1,43 +1,113 @@
-let dayCount = 0;
+let dayCount = 0
 
-function addDay() {
+const saved = JSON.parse(localStorage.getItem("tripData"))
 
-    dayCount++;
+if(saved){
+document.getElementById("tripName").value = saved.name || ""
+document.getElementById("tripDates").value = saved.dates || ""
+}
 
-    const daysContainer = document.getElementById("days");
+function saveTrip(){
 
-    const dayDiv = document.createElement("div");
-    dayDiv.className = "day";
+const name = document.getElementById("tripName").value
+const dates = document.getElementById("tripDates").value
 
-    dayDiv.innerHTML = `
-        <h3>Day ${dayCount}</h3>
-        <input id="activity-input-${dayCount}" placeholder="Add activity">
-        <button onclick="addActivity(${dayCount})">Add Activity</button>
-        <ul id="activity-list-${dayCount}"></ul>
-    `;
-
-    daysContainer.appendChild(dayDiv);
+localStorage.setItem("tripData",JSON.stringify({
+name:name,
+dates:dates
+}))
 
 }
 
-function addActivity(dayNumber){
+function addDay(){
 
-    const input = document.getElementById(`activity-input-${dayNumber}`);
-    const list = document.getElementById(`activity-list-${dayNumber}`);
+dayCount++
 
-    if(input.value.trim() === "") return;
+const container = document.getElementById("days")
 
-    const li = document.createElement("li");
-    li.textContent = input.value;
+const day = document.createElement("div")
 
-    list.appendChild(li);
+day.className = "day"
 
-    input.value = "";
+day.innerHTML = `
+<h3>Day ${dayCount}</h3>
+
+<input id="activity-${dayCount}" placeholder="Activity">
+
+<button onclick="addActivity(${dayCount})">
+Add
+</button>
+
+<ul id="list-${dayCount}"></ul>
+`
+
+container.appendChild(day)
 
 }
-const map = L.map('map').setView([20,0],2);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenStreetMap'
-}).addTo(map);
+function addActivity(day){
 
+const input = document.getElementById(`activity-${day}`)
+
+if(input.value === "") return
+
+const list = document.getElementById(`list-${day}`)
+
+const li = document.createElement("li")
+
+li.textContent = input.value
+
+list.appendChild(li)
+
+input.value = ""
+
+}
+
+const map = L.map('map').setView([20,0],2)
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+attribution:'© OpenStreetMap'
+}
+).addTo(map)
+
+map.on("click",function(e){
+
+const lat = e.latlng.lat
+const lng = e.latlng.lng
+
+const marker = L.marker([lat,lng]).addTo(map)
+
+marker.bindPopup(
+"Location<br>"+lat.toFixed(3)+","+lng.toFixed(3)
+)
+
+saveMarker(lat,lng)
+
+})
+
+function saveMarker(lat,lng){
+
+let markers = JSON.parse(localStorage.getItem("markers")) || []
+
+markers.push({lat:lat,lng:lng})
+
+localStorage.setItem("markers",JSON.stringify(markers))
+
+}
+
+function loadMarkers(){
+
+const markers = JSON.parse(localStorage.getItem("markers")) || []
+
+markers.forEach(m=>{
+
+L.marker([m.lat,m.lng])
+.addTo(map)
+
+})
+
+}
+
+loadMarkers()
