@@ -103,8 +103,7 @@ const markers = JSON.parse(localStorage.getItem("markers")) || []
 
 markers.forEach(m=>{
 
-L.marker([m.lat,m.lng])
-.addTo(map)
+L.marker([m.lat,m.lng]).addTo(map)
 
 })
 
@@ -138,5 +137,15 @@ const marker = L.marker([lat,lon]).addTo(map)
 marker.bindPopup(place.display_name).openPopup()
 
 saveMarker(lat,lon)
+
+}
+
+function exportPDF(){
+
+const element = document.body
+
+html2pdf()
+.from(element)
+.save("trip-itinerary.pdf")
 
 }
