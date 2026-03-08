@@ -11,10 +11,28 @@ function addDay() {
 
     dayDiv.innerHTML = `
         <h3>Day ${dayCount}</h3>
-        <input placeholder="Add activity">
-        <button>Add</button>
+        <input id="activity-input-${dayCount}" placeholder="Add activity">
+        <button onclick="addActivity(${dayCount})">Add Activity</button>
+        <ul id="activity-list-${dayCount}"></ul>
     `;
 
     daysContainer.appendChild(dayDiv);
 
 }
+
+function addActivity(dayNumber){
+
+    const input = document.getElementById(`activity-input-${dayNumber}`);
+    const list = document.getElementById(`activity-list-${dayNumber}`);
+
+    if(input.value.trim() === "") return;
+
+    const li = document.createElement("li");
+    li.textContent = input.value;
+
+    list.appendChild(li);
+
+    input.value = "";
+
+}
+
