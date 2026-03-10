@@ -81,11 +81,9 @@ day_labels = [f"Day {i+1} - {d.date()}" for i,d in enumerate(days)]
 st.header("Add Activity")
 
 selected_day = st.selectbox("Select Day", day_labels)
-
 with st.form("add_activity_form"):
 
     activity = st.text_input("Activity")
-
     location = st.text_input("Location")
 
     submitted = st.form_submit_button("Add Activity")
@@ -100,8 +98,8 @@ with st.form("add_activity_form"):
         conn.commit()
 
         st.success("Activity added")
-
         st.rerun()
+
 
 # ---------------- DISPLAY ITINERARY ----------------
 
