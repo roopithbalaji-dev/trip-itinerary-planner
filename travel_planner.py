@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Smart Travel Planner", layout="wide")
 
-st.title("🌍 Smart Travel Planner Pro")
+st.title("🌍 Smart Travel Planner")
 
 # ---------------- DATABASE ----------------
 
@@ -36,15 +36,6 @@ lon REAL
 )
 """)
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS expenses(
-id INTEGER PRIMARY KEY,
-trip_id INTEGER,
-amount REAL,
-note TEXT
-)
-""")
-
 conn.commit()
 
 # ---------------- SIDEBAR ----------------
@@ -52,7 +43,6 @@ conn.commit()
 st.sidebar.header("Trips")
 
 trip_name = st.sidebar.text_input("Trip Name")
-
 date_range = st.sidebar.date_input("Trip Dates", value=[])
 
 if st.sidebar.button("Create Trip"):
@@ -65,7 +55,6 @@ if st.sidebar.button("Create Trip"):
         """,(trip_name,str(date_range[0]),str(date_range[1])))
 
         conn.commit()
-
         st.sidebar.success("Trip created")
         st.rerun()
 
@@ -76,10 +65,7 @@ if trips.empty:
     st.warning("Create a trip first")
     st.stop()
 
-trip_selected = st.sidebar.selectbox(
-    "Select Trip",
-    trips["trip_name"]
-)
+trip_selected = st.sidebar.selectbox("Select Trip", trips["trip_name"])
 
 trip_id = trips[trips["trip_name"]==trip_selected]["id"].values[0]
 
@@ -91,31 +77,14 @@ end = pd.to_datetime(trip_data["end_date"])
 days_count = (end - start).days + 1
 days = [start + timedelta(days=i) for i in range(days_count)]
 
-# ---------------- DASHBOARD ----------------
-
-st.header("Trip Overview")
-
-col1,col2,col3 = st.columns(3)
-
-col1.metric("Trip Days", days_count)
-
-activity_count = pd.read_sql_query(
-f"SELECT COUNT(*) as c FROM activities WHERE trip_id={trip_id}", conn
-)["c"][0]
-
-col2.metric("Activities Planned", activity_count)
-
-expense_sum = pd.read_sql_query(
-f"SELECT SUM(amount) as s FROM expenses WHERE trip_id={trip_id}", conn
-)["s"][0]
-
-expense_sum = 0 if expense_sum is None else expense_sum
-
-col3.metric("Total Budget", f"€{expense_sum}")
-
 # ---------------- ITINERARY ----------------
 
-st.header("📅 Itinerary")
+st.header("📅 Trip Itinerary")
+
+activities = pd.read_sql_query(
+f"SELECT * FROM activities WHERE trip_id={trip_id}",
+conn
+)
 
 for i,day in enumerate(days):
 
@@ -123,13 +92,46 @@ for i,day in enumerate(days):
 
     st.subheader(day_label)
 
-    col1,col2,col3 = st.columns(3)
+    # Show saved activities
+    day_data = activities[activities["day"] == day_label]
 
-    activity = col1.text_input("Activity", key=f"a{i}")
-    location = col2.text_input("Location", key=f"l{i}")
-    coords = col3.text_input("Lat,Lon", key=f"c{i}")
+    if not day_data.empty:
 
-    if st.button("Add Activity", key=f"btn{i}"):
+        for _,row in day_data.iterrows():
+
+            col1,col2 = st.columns([6,1])
+
+            col1.write(f"• {row['activity']} ({row['location']})")
+
+            if col2.button("❌", key=f"del{row['id']}"):
+
+                cursor.execute(
+                "DELETE FROM activities WHERE id=?",
+                (row["id"],)
+                )
+
+                conn.commit()
+                st.rerun()
+
+    # Add new activity
+    col1,col2,col3,col4 = st.columns([3,3,2,1])
+
+    activity = col1.text_input(
+        "Activity",
+        key=f"act{i}"
+    )
+
+    location = col2.text_input(
+        "Location",
+        key=f"loc{i}"
+    )
+
+    coords = col3.text_input(
+        "Lat,Lon",
+        key=f"coord{i}"
+    )
+
+    if col4.button("Add", key=f"add{i}"):
 
         lat,lon = None,None
 
@@ -144,20 +146,9 @@ for i,day in enumerate(days):
         conn.commit()
         st.rerun()
 
-# Show activities
-activities = pd.read_sql_query(
-f"SELECT * FROM activities WHERE trip_id={trip_id}", conn
-)
-
-if not activities.empty:
-
-    st.subheader("Planned Activities")
-
-    st.dataframe(activities)
-
 # ---------------- MAP ----------------
 
-st.header("📍 Map View")
+st.header("📍 Map")
 
 if not activities.empty:
 
@@ -172,36 +163,9 @@ if not activities.empty:
                 popup=row["activity"]
             ).add_to(m)
 
-    st_folium(m,width=700)
+    st_folium(m,width=900)
 
-# ---------------- EXPENSE TRACKER ----------------
-
-st.header("💰 Budget Tracker")
-
-col1,col2 = st.columns(2)
-
-amount = col1.number_input("Expense Amount", min_value=0.0)
-note = col2.text_input("Expense Note")
-
-if st.button("Add Expense"):
-
-    cursor.execute("""
-    INSERT INTO expenses(trip_id,amount,note)
-    VALUES(?,?,?)
-    """,(trip_id,amount,note))
-
-    conn.commit()
-    st.rerun()
-
-expenses = pd.read_sql_query(
-f"SELECT * FROM expenses WHERE trip_id={trip_id}", conn
-)
-
-if not expenses.empty:
-
-    st.dataframe(expenses)
-
-# ---------------- EXPORT PDF ----------------
+# ---------------- EXPORT ----------------
 
 st.header("📄 Export Itinerary")
 
@@ -234,8 +198,8 @@ if st.button("Generate PDF"):
     with open(pdf_file,"rb") as f:
 
         st.download_button(
-            label="Download PDF",
-            data=f,
-            file_name="trip_plan.pdf",
-            mime="application/pdf"
+            "Download Itinerary",
+            f,
+            "trip_plan.pdf",
+            "application/pdf"
         )
