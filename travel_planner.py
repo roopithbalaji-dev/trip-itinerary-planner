@@ -4,18 +4,23 @@ import sqlite3
 from datetime import timedelta
 from fpdf import FPDF
 
-st.set_page_config(page_title="Travel Planner", layout="wide")
+st.set_page_config(page_title="Smart Travel Planner", layout="wide")
 
 st.title("🌍 Smart Travel Planner")
 
 # ---------------- DATABASE ----------------
 
-conn = sqlite3.connect("travel_planner.db", check_same_thread=False)
+@st.cache_resource
+def get_connection():
+    conn = sqlite3.connect("travel_planner.db", check_same_thread=False)
+    return conn
+
+conn = get_connection()
 cursor = conn.cursor()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS trips(
-id INTEGER PRIMARY KEY,
+id INTEGER PRIMARY KEY AUTOINCREMENT,
 trip_name TEXT,
 start_date TEXT,
 end_date TEXT
@@ -24,7 +29,7 @@ end_date TEXT
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS activities(
-id INTEGER PRIMARY KEY,
+id INTEGER PRIMARY KEY AUTOINCREMENT,
 trip_id INTEGER,
 day TEXT,
 activity TEXT,
@@ -39,7 +44,6 @@ conn.commit()
 st.sidebar.header("Create Trip")
 
 trip_name = st.sidebar.text_input("Trip Name")
-
 date_range = st.sidebar.date_input("Trip Dates", value=[])
 
 if st.sidebar.button("Create Trip"):
@@ -52,6 +56,7 @@ if st.sidebar.button("Create Trip"):
         """,(trip_name,str(date_range[0]),str(date_range[1])))
 
         conn.commit()
+        st.sidebar.success("Trip created")
         st.rerun()
 
 # ---------------- LOAD TRIPS ----------------
@@ -76,34 +81,50 @@ days = [start + timedelta(days=i) for i in range(days_count)]
 
 day_labels = [f"Day {i+1} - {d.date()}" for i,d in enumerate(days)]
 
+# ---------------- DASHBOARD ----------------
+
+st.subheader("Trip Overview")
+
+col1,col2 = st.columns(2)
+
+col1.metric("Trip Days", days_count)
+
+activity_count = pd.read_sql_query(
+f"SELECT COUNT(*) as c FROM activities WHERE trip_id={trip_id}", conn
+)["c"][0]
+
+col2.metric("Activities Planned", activity_count)
+
 # ---------------- ADD ACTIVITY ----------------
 
-st.header("Add Activity")
+st.subheader("Add Activity")
 
 selected_day = st.selectbox("Select Day", day_labels)
-with st.form("add_activity_form"):
+
+with st.form("activity_form", clear_on_submit=True):
 
     activity = st.text_input("Activity")
     location = st.text_input("Location")
 
     submitted = st.form_submit_button("Add Activity")
 
-    if submitted and activity:
+    if submitted:
 
-        cursor.execute("""
-        INSERT INTO activities(trip_id,day,activity,location)
-        VALUES(?,?,?,?)
-        """,(trip_id,selected_day,activity,location))
+        if activity:
 
-        conn.commit()
+            cursor.execute("""
+            INSERT INTO activities(trip_id,day,activity,location)
+            VALUES(?,?,?,?)
+            """,(trip_id,selected_day,activity,location))
 
-        st.success("Activity added")
-        st.rerun()
+            conn.commit()
 
+            st.success("Activity added")
+            st.rerun()
 
-# ---------------- DISPLAY ITINERARY ----------------
+# ---------------- ITINERARY ----------------
 
-st.header("Trip Itinerary")
+st.subheader("Trip Itinerary")
 
 activities = pd.read_sql_query(
 f"SELECT * FROM activities WHERE trip_id={trip_id}",
@@ -112,9 +133,9 @@ conn
 
 for day in day_labels:
 
-    st.subheader(day)
+    st.markdown(f"### {day}")
 
-    day_data = activities[activities["day"]==day]
+    day_data = activities[activities["day"] == day]
 
     if day_data.empty:
 
@@ -126,9 +147,9 @@ for day in day_labels:
 
             col1,col2 = st.columns([8,1])
 
-            col1.write(f"• {row['activity']} ({row['location']})")
+            col1.write(f"• **{row['activity']}** — {row['location']}")
 
-            if col2.button("Delete", key=row["id"]):
+            if col2.button("❌", key=f"del_{row['id']}"):
 
                 cursor.execute(
                 "DELETE FROM activities WHERE id=?",
@@ -136,12 +157,11 @@ for day in day_labels:
                 )
 
                 conn.commit()
-
                 st.rerun()
 
-# ---------------- EXPORT ----------------
+# ---------------- EXPORT PDF ----------------
 
-st.header("Export Itinerary")
+st.subheader("Export Itinerary")
 
 def create_pdf():
 
