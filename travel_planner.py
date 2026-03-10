@@ -3,10 +3,8 @@ import pandas as pd
 import sqlite3
 from datetime import timedelta
 from fpdf import FPDF
-import folium
-from streamlit_folium import st_folium
 
-st.set_page_config(page_title="Smart Travel Planner", layout="wide")
+st.set_page_config(page_title="Travel Planner", layout="wide")
 
 st.title("🌍 Smart Travel Planner")
 
@@ -30,19 +28,18 @@ id INTEGER PRIMARY KEY,
 trip_id INTEGER,
 day TEXT,
 activity TEXT,
-location TEXT,
-lat REAL,
-lon REAL
+location TEXT
 )
 """)
 
 conn.commit()
 
-# ---------------- SIDEBAR ----------------
+# ---------------- CREATE TRIP ----------------
 
-st.sidebar.header("Trips")
+st.sidebar.header("Create Trip")
 
 trip_name = st.sidebar.text_input("Trip Name")
+
 date_range = st.sidebar.date_input("Trip Dates", value=[])
 
 if st.sidebar.button("Create Trip"):
@@ -55,10 +52,10 @@ if st.sidebar.button("Create Trip"):
         """,(trip_name,str(date_range[0]),str(date_range[1])))
 
         conn.commit()
-        st.sidebar.success("Trip created")
         st.rerun()
 
-# Load trips
+# ---------------- LOAD TRIPS ----------------
+
 trips = pd.read_sql_query("SELECT * FROM trips", conn)
 
 if trips.empty:
@@ -74,36 +71,66 @@ trip_data = trips[trips["id"]==trip_id].iloc[0]
 start = pd.to_datetime(trip_data["start_date"])
 end = pd.to_datetime(trip_data["end_date"])
 
-days_count = (end - start).days + 1
+days_count = (end-start).days + 1
 days = [start + timedelta(days=i) for i in range(days_count)]
 
-# ---------------- ITINERARY ----------------
+day_labels = [f"Day {i+1} - {d.date()}" for i,d in enumerate(days)]
 
-st.header("📅 Trip Itinerary")
+# ---------------- ADD ACTIVITY ----------------
+
+st.header("Add Activity")
+
+selected_day = st.selectbox("Select Day", day_labels)
+
+with st.form("add_activity_form"):
+
+    activity = st.text_input("Activity")
+
+    location = st.text_input("Location")
+
+    submitted = st.form_submit_button("Add Activity")
+
+    if submitted and activity:
+
+        cursor.execute("""
+        INSERT INTO activities(trip_id,day,activity,location)
+        VALUES(?,?,?,?)
+        """,(trip_id,selected_day,activity,location))
+
+        conn.commit()
+
+        st.success("Activity added")
+
+        st.rerun()
+
+# ---------------- DISPLAY ITINERARY ----------------
+
+st.header("Trip Itinerary")
 
 activities = pd.read_sql_query(
 f"SELECT * FROM activities WHERE trip_id={trip_id}",
 conn
 )
 
-for i,day in enumerate(days):
+for day in day_labels:
 
-    day_label = f"Day {i+1} - {day.date()}"
+    st.subheader(day)
 
-    st.subheader(day_label)
+    day_data = activities[activities["day"]==day]
 
-    # Show saved activities
-    day_data = activities[activities["day"] == day_label]
+    if day_data.empty:
 
-    if not day_data.empty:
+        st.write("No activities yet")
+
+    else:
 
         for _,row in day_data.iterrows():
 
-            col1,col2 = st.columns([6,1])
+            col1,col2 = st.columns([8,1])
 
             col1.write(f"• {row['activity']} ({row['location']})")
 
-            if col2.button("❌", key=f"del{row['id']}"):
+            if col2.button("Delete", key=row["id"]):
 
                 cursor.execute(
                 "DELETE FROM activities WHERE id=?",
@@ -111,63 +138,12 @@ for i,day in enumerate(days):
                 )
 
                 conn.commit()
+
                 st.rerun()
-
-    # Add new activity
-    col1,col2,col3,col4 = st.columns([3,3,2,1])
-
-    activity = col1.text_input(
-        "Activity",
-        key=f"act{i}"
-    )
-
-    location = col2.text_input(
-        "Location",
-        key=f"loc{i}"
-    )
-
-    coords = col3.text_input(
-        "Lat,Lon",
-        key=f"coord{i}"
-    )
-
-    if col4.button("Add", key=f"add{i}"):
-
-        lat,lon = None,None
-
-        if coords:
-            lat,lon = coords.split(",")
-
-        cursor.execute("""
-        INSERT INTO activities(trip_id,day,activity,location,lat,lon)
-        VALUES(?,?,?,?,?,?)
-        """,(trip_id,day_label,activity,location,lat,lon))
-
-        conn.commit()
-        st.rerun()
-
-# ---------------- MAP ----------------
-
-st.header("📍 Map")
-
-if not activities.empty:
-
-    m = folium.Map(location=[20,0], zoom_start=2)
-
-    for _,row in activities.iterrows():
-
-        if row["lat"] and row["lon"]:
-
-            folium.Marker(
-                location=[row["lat"],row["lon"]],
-                popup=row["activity"]
-            ).add_to(m)
-
-    st_folium(m,width=900)
 
 # ---------------- EXPORT ----------------
 
-st.header("📄 Export Itinerary")
+st.header("Export Itinerary")
 
 def create_pdf():
 
