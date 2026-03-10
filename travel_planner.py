@@ -97,30 +97,41 @@ col2.metric("Activities Planned", activity_count)
 
 # ---------------- ADD ACTIVITY ----------------
 
+# ---------------- ADD ACTIVITY ----------------
+
 st.subheader("Add Activity")
 
-selected_day = st.selectbox("Select Day", day_labels)
+# Ensure trip exists
+if trip_id:
+    selected_day = st.selectbox("Select Day", day_labels)
 
-with st.form("activity_form", clear_on_submit=True):
+    with st.form("activity_form"):
+        activity = st.text_input("Activity")
+        location = st.text_input("Location")
+        submitted = st.form_submit_button("Add Activity")
 
-    activity = st.text_input("Activity")
-    location = st.text_input("Location")
+        if submitted:
+            if not activity:
+                st.error("Please enter an activity")
+            else:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                    INSERT INTO activities(trip_id,day,activity,location)
+                    VALUES(?,?,?,?)
+                    """,(trip_id, selected_day, activity, location or ""))
+                    
+                    conn.commit()
+                    cursor.close()
+                    
+                    st.success(f"Activity '{activity}' added to {selected_day}")
+                    st.rerun()
+                    
+                except sqlite3.Error as e:
+                    st.error(f"Database error: {e}")
+                except Exception as e:
+                    st.error(f"Error adding activity: {e}")
 
-    submitted = st.form_submit_button("Add Activity")
-
-    if submitted:
-
-        if activity:
-
-            cursor.execute("""
-            INSERT INTO activities(trip_id,day,activity,location)
-            VALUES(?,?,?,?)
-            """,(trip_id,selected_day,activity,location))
-
-            conn.commit()
-
-            st.success("Activity added")
-            st.rerun()
 
 # ---------------- ITINERARY ----------------
 
